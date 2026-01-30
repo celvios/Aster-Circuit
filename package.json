@@ -1,0 +1,12 @@
+{
+  "name": "aster-circuit-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces",
+    "build": "npm run build --workspaces"
+  }
+}
