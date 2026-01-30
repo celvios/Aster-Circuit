@@ -5,20 +5,25 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../interfaces/IAsBNBMinter.sol";
 import "../interfaces/IPancakeRouter02.sol";
 import "../interfaces/IPancakeFactory.sol";
 import "../interfaces/IPancakePair.sol";
 import "../interfaces/IMasterChefV2.sol";
 import "../libraries/FixedPointMath.sol";
 
+interface IWBNB {
+    function deposit() external payable;
+    function withdraw(uint256) external;
+}
+
 /**
  * @title AsterStrategy
  * @notice Core strategy contract for AsterCircuit
  * @dev Implements the Resilient Compound Stacking (RCS) strategy:
- *      1. Harvest yield from AsterDEX (asBNB appreciation)
- *      2. Compound into PancakeSwap BNB-USDT LP
- *      3. Monitor Impermanent Loss and rebalance
+ *      1. Accepts BNB deposits and swaps to asBNB (via PancakeSwap)
+ *      2. Harvests yield from asBNB (appreciation)
+ *      3. Compounds yield into PancakeSwap BNB-USDT LP
+ *      4. Monitors Impermanent Loss and rebalances
  */
 contract AsterStrategy is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
@@ -33,7 +38,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     address public immutable vault;
     IERC20 public immutable asBNB;
-    IAsBNBMinter public immutable asterMinter;
     IPancakeRouter02 public immutable pancakeRouter;
     IPancakeFactory public immutable pancakeFactory;
     IMasterChefV2 public immutable masterChef;
@@ -67,6 +71,15 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
     /// @notice LP position active flag
     bool public hasActiveLP;
 
+    /// @notice Total asBNB held by the strategy (principal + yield)
+    uint256 public totalAsBNBHeld;
+    
+    /// @notice Base asBNB deposits (cost basis) - tracks principal only
+    uint256 public baseAsBNBDeposits;
+    
+    /// @notice Accumulated yield from asBNB appreciation
+    uint256 public totalAsBNBYield;
+
     // ============ Structs ============
 
     struct LPPosition {
@@ -81,6 +94,8 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     // ============ Events ============
 
+    event Deposited(uint256 bnbAmount, uint256 asBNBReceived);
+    event Withdrawn(uint256 bnbAmount, uint256 asBNBSold);
     event Compounded(uint256 yieldHarvested, uint256 lpTokensReceived);
     event LPExited(uint256 lpTokens, uint256 bnbRecovered, uint256 usdtRecovered, string reason);
     event ILThresholdExceeded(uint256 currentIL, uint256 threshold);
@@ -99,7 +114,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
     constructor(
         address _vault,
         address _asBNB,
-        address _asterMinter,
         address _pancakeRouter,
         address _pancakeFactory,
         address _masterChef,
@@ -110,7 +124,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
     ) Ownable(msg.sender) {
         vault = _vault;
         asBNB = IERC20(_asBNB);
-        asterMinter = IAsBNBMinter(_asterMinter);
         pancakeRouter = IPancakeRouter02(_pancakeRouter);
         pancakeFactory = IPancakeFactory(_pancakeFactory);
         masterChef = IMasterChefV2(_masterChef);
@@ -132,7 +145,7 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         require(masterChef.lpToken(_poolId) == lpPair, "Invalid pool ID");
 
         // Approve tokens
-        asBNB.approve(address(asterMinter), type(uint256).max);
+        asBNB.approve(address(pancakeRouter), type(uint256).max); // Approve for swap
         wbnb.approve(address(pancakeRouter), type(uint256).max);
         usdt.approve(address(pancakeRouter), type(uint256).max);
         IERC20(lpPair).approve(address(pancakeRouter), type(uint256).max);
@@ -149,17 +162,69 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
     // ============ Core Strategy Functions ============
 
     /**
+     * @notice Deposit BNB and get asBNB via PancakeSwap
+     * @dev Called by Vault for user deposits
+     */
+    function deposit(uint256 amount) external onlyVault {
+        // Unwrap WBNB to BNB if we hold WBNB
+        uint256 wbnbBalance = wbnb.balanceOf(address(this));
+        if (wbnbBalance >= amount) {
+            IWBNB(address(wbnb)).withdraw(amount);
+        } else {
+            // Assume BNB was sent to contract
+            require(address(this).balance >= amount, "Insufficient BNB/WBNB");
+        }
+        
+        // Swap BNB -> asBNB via PancakeSwap
+        uint256 asBNBReceived = _swapBNBForAsBNB(amount);
+        
+        totalAsBNBHeld += asBNBReceived;
+        baseAsBNBDeposits += asBNBReceived; // Track cost basis
+        
+        emit Deposited(amount, asBNBReceived);
+    }
+
+    /**
+     * @notice Withdraw: Sell asBNB for BNB
+     * @dev Called by Vault for user withdrawals
+     */
+    function withdraw(uint256 bnbAmount) external onlyVault {
+        // Swap asBNB -> BNB
+        uint256 asBNBToSell = _swapAsBNBForBNB(bnbAmount);
+        
+        // Wrap BNB to WBNB and send to vault
+        IWBNB(address(wbnb)).deposit{value: bnbAmount}();
+        wbnb.safeTransfer(vault, bnbAmount);
+        
+        // Update accounting
+        if (totalAsBNBHeld >= asBNBToSell) {
+            totalAsBNBHeld -= asBNBToSell;
+            
+            // Proportionally reduce base deposits
+            if (baseAsBNBDeposits >= asBNBToSell) {
+                baseAsBNBDeposits -= asBNBToSell;
+            } else {
+                baseAsBNBDeposits = 0;
+            }
+        } else {
+            totalAsBNBHeld = 0;
+            baseAsBNBDeposits = 0;
+        }
+       
+        emit Withdrawn(bnbAmount, asBNBToSell);
+    }
+
+    /**
      * @notice Main compounding function - harvest and deploy to PancakeSwap
      * @dev Called by Heartbeat contract or external keeper
      */
     function compound() external nonReentrant returns (uint256 lpTokensReceived) {
-        // Step 1: Harvest yield from AsterDEX
-        uint256 yieldHarvested = harvestAsterYield();
+        uint256 yieldHarvested = harvestAsterYield(); 
         
         if (yieldHarvested < compoundThreshold) revert BelowThreshold();
 
-        // Step 2: Convert asBNB to BNB
-        uint256 bnbAmount = asterMinter.redeem(yieldHarvested);
+        // Swap yield (asBNB) -> BNB
+        uint256 bnbAmount = _swapAsBNBForBNBInternal(yieldHarvested); 
 
         // Step 3: Split for LP (50/50)
         uint256 bnbForLP = bnbAmount / 2;
@@ -191,10 +256,12 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     /**
      * @notice Check and rebalance if IL exceeds threshold
-     * @dev Automatically exits LP if impermanent loss is too high
      */
     function checkAndRebalance() external nonReentrant {
         if (!hasActiveLP) revert NoActiveLP();
+        
+        // First, harvest any pending CAKE rewards
+        harvestLPRewards();
 
         // Calculate current impermanent loss
         uint256 currentIL = calculateImpermanentLoss();
@@ -203,29 +270,106 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         if (currentIL > ilThreshold) {
             emit ILThresholdExceeded(currentIL, ilThreshold);
             exitLPPosition("IL threshold exceeded");
-        } else {
-            // Otherwise, harvest LP rewards and compound
-            harvestLPRewards();
         }
     }
 
     // ============ Internal Functions ============
 
     /**
-     * @notice Harvest yield from AsterDEX
+     * @notice Swap BNB for asBNB using PancakeSwap
+     */
+    function _swapBNBForAsBNB(uint256 bnbAmount) internal returns (uint256) {
+        address[] memory path = new address[](2);
+        path[0] = address(wbnb);
+        path[1] = address(asBNB);
+        
+        // Get expected output (for slippage protection)
+        uint256[] memory amountsOut = pancakeRouter.getAmountsOut(bnbAmount, path);
+        
+        // Set minimum output (slippage tolerance)
+        uint256 minOutput = (amountsOut[1] * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
+        
+        // Execute swap
+        uint256[] memory amounts = pancakeRouter.swapExactETHForTokens{
+            value: bnbAmount
+        }(
+            minOutput,
+            path,
+            address(this),
+            block.timestamp + 300
+        );
+        
+        return amounts[1]; // Amount of asBNB received
+    }
+
+    /**
+     * @notice Swap asBNB for BNB using PancakeSwap (External Wrapper)
+     */
+    function _swapAsBNBForBNB(uint256 bnbOutcomeDesired) internal returns (uint256) {
+        // We need to sell enough asBNB to get 'bnbOutcomeDesired'
+        address[] memory path = new address[](2);
+        path[0] = address(asBNB);
+        path[1] = address(wbnb);
+        
+        uint256[] memory amountsIn = pancakeRouter.getAmountsIn(bnbOutcomeDesired, path);
+        uint256 asBNBToSell = amountsIn[0];
+        
+        // Check balance
+        require(asBNB.balanceOf(address(this)) >= asBNBToSell, "Insufficient asBNB");
+        
+        // Swap
+        pancakeRouter.swapExactTokensForETH(
+            asBNBToSell,
+            bnbOutcomeDesired,
+            path,
+            address(this),
+            block.timestamp + 300
+        );
+        
+        return asBNBToSell;
+    }
+
+    /**
+     * @notice Swap exact asBNB for BNB (Internal Helper for compounding)
+     */
+    function _swapAsBNBForBNBInternal(uint256 asBNBAmount) internal returns (uint256) {
+        address[] memory path = new address[](2);
+        path[0] = address(asBNB);
+        path[1] = address(wbnb);
+
+        uint256[] memory amountsOut = pancakeRouter.getAmountsOut(asBNBAmount, path);
+        uint256 minBNB = (amountsOut[1] * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
+        
+        uint256[] memory amounts = pancakeRouter.swapExactTokensForETH(
+            asBNBAmount,
+            minBNB,
+            path,
+            address(this),
+            block.timestamp + 300
+        );
+        
+        return amounts[1];
+    }
+    
+    /**
+     * @notice Calculate and harvest yield from asBNB appreciation
      * @return yieldAmount Amount of asBNB yield harvested
      */
     function harvestAsterYield() internal returns (uint256 yieldAmount) {
-        uint256 currentBalance = asBNB.balanceOf(address(this));
+        uint256 currentAsBNBBalance = asBNB.balanceOf(address(this));
         
-        // Request yield from vault if needed
-        if (currentBalance < compoundThreshold) {
-            // Vault will allocate asBNB for compounding
-            // This is a simplified version - real implementation would calculate available yield
-            return 0;
+        // Yield = current balance - base deposits
+        // (asBNB appreciates over time, so balance > deposits means yield)
+        if (currentAsBNBBalance > baseAsBNBDeposits) {
+            yieldAmount = currentAsBNBBalance - baseAsBNBDeposits;
+            
+            // Update accounting
+            totalAsBNBYield += yieldAmount;
+            baseAsBNBDeposits = currentAsBNBBalance; // Reset basis after harvest
+        } else {
+            yieldAmount = 0;
         }
-
-        yieldAmount = currentBalance;
+        
         lastHarvestedAmount = yieldAmount;
     }
 
@@ -237,7 +381,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         path[0] = address(wbnb);
         path[1] = address(usdt);
 
-        // Calculate minimum USDT with slippage protection
         uint256[] memory amountsOut = pancakeRouter.getAmountsOut(bnbAmount, path);
         uint256 minUSDT = (amountsOut[1] * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
 
@@ -258,7 +401,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         uint256 bnbAmount,
         uint256 usdtAmount
     ) internal returns (uint256 lpTokens) {
-        // Calculate minimum amounts with slippage protection
         uint256 minBNB = (bnbAmount * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
         uint256 minUSDT = (usdtAmount * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
 
@@ -287,9 +429,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         
         if (pendingRewards > 0) {
             masterChef.harvest(poolId, address(this));
-            
-            // Optionally: swap CAKE for BNB and compound
-            // For now, just keep CAKE in contract
         }
     }
 
@@ -297,26 +436,22 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
      * @notice Exit LP position and return to AsterDEX
      */
     function exitLPPosition(string memory reason) internal {
-        // Withdraw LP tokens from MasterChef
         IMasterChefV2.UserInfo memory userInfo = masterChef.userInfo(poolId, address(this));
         uint256 stakedLP = userInfo.amount;
 
         if (stakedLP > 0) {
             masterChef.withdraw(poolId, stakedLP);
             
-            // Remove liquidity from PancakeSwap
             (uint256 bnbRecovered, uint256 usdtRecovered) = removeLiquidity(stakedLP);
             
-            // Swap USDT back to BNB
             uint256 bnbFromUSDT = swapUSDTForBNB(usdtRecovered);
             uint256 totalBNB = bnbRecovered + bnbFromUSDT;
             
-            // Convert BNB back to asBNB
-            uint256 asBNBReceived = asterMinter.mint{value: totalBNB}();
+            // Convert BNB back to asBNB via Swap
+            uint256 asBNBReceived = _swapBNBForAsBNB(totalBNB);
             
-            // Return to vault
-            asBNB.approve(vault, asBNBReceived);
-            // Note: Vault would need a function to accept this
+            // Update tracking
+            totalAsBNBHeld += asBNBReceived;
             
             emit LPExited(stakedLP, bnbRecovered, usdtRecovered, reason);
         }
@@ -329,7 +464,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
      * @notice Remove liquidity from PancakeSwap
      */
     function removeLiquidity(uint256 lpTokens) internal returns (uint256 bnbAmount, uint256 usdtAmount) {
-        // Calculate minimum amounts
         (uint112 reserve0, uint112 reserve1, ) = IPancakePair(lpPair).getReserves();
         uint256 totalSupply = IERC20(lpPair).totalSupply();
         
@@ -372,7 +506,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     /**
      * @notice Calculate current impermanent loss
-     * @return ilPercent IL as basis points (e.g., 500 = 5%)
      */
     function calculateImpermanentLoss() public view returns (uint256 ilPercent) {
         if (!hasActiveLP) return 0;
@@ -382,22 +515,16 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
         if (currentPrice == 0 || entryPrice == 0) return 0;
 
-        // Calculate price ratio
         uint256 priceRatio = currentPrice > entryPrice 
             ? (currentPrice * PRECISION) / entryPrice
             : (entryPrice * PRECISION) / currentPrice;
-
-        // IL formula: 2 * sqrt(priceRatio) / (1 + priceRatio) - 1
-        // Returns IL as basis points (e.g., 500 = 5%)
-        
+            
         uint256 sqrtRatio = FixedPointMath.sqrt(priceRatio);
         uint256 numerator = 2 * sqrtRatio;
         uint256 denominator = PRECISION + priceRatio;
         
-        // Calculate: 2*sqrt(r)/(1+r)
         uint256 ratio = (numerator * PRECISION) / denominator;
         
-        // Calculate IL: ratio - 1 (convert to basis points)
         if (ratio >= PRECISION) {
             ilPercent = ((ratio - PRECISION) * BASIS_POINTS) / PRECISION;
         } else {
@@ -407,19 +534,14 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     /**
      * @notice Get current BNB/USDT price from LP pool
-     * @return price Price with 18 decimals
      */
     function getCurrentPrice() public view returns (uint256 price) {
         (uint112 reserve0, uint112 reserve1, ) = IPancakePair(lpPair).getReserves();
-        
-        // Check token order
         address token0 = IPancakePair(lpPair).token0();
         
         if (token0 == address(usdt)) {
-            // USDT is token0, BNB is token1
             price = (uint256(reserve0) * PRECISION) / uint256(reserve1);
         } else {
-            // BNB is token0, USDT is token1
             price = (uint256(reserve1) * PRECISION) / uint256(reserve0);
         }
     }
@@ -433,9 +555,6 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
 
     // ============ Admin Functions ============
 
-    /**
-     * @notice Update strategy parameters
-     */
     function setParameters(
         uint256 _compoundThreshold,
         uint256 _ilThreshold,
@@ -444,13 +563,9 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         compoundThreshold = _compoundThreshold;
         ilThreshold = _ilThreshold;
         slippageTolerance = _slippageTolerance;
-
         emit ParametersUpdated(_compoundThreshold, _ilThreshold, _slippageTolerance);
     }
 
-    /**
-     * @notice Emergency exit all positions
-     */
     function emergencyExit() external onlyOwner {
         if (hasActiveLP) {
             exitLPPosition("Emergency exit");
