@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "../interfaces/IAsBNBMinter.sol";
 
 /**
@@ -14,7 +15,7 @@ import "../interfaces/IAsBNBMinter.sol";
  * @dev Accepts BNB deposits, converts to asBNB via AsterDEX for base yield
  *      All yield compounding and stacking logic is handled by the Strategy contract
  */
-contract CircuitVault is ERC4626, ReentrancyGuard, Ownable {
+contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
     // ============ State Variables ============
@@ -30,20 +31,15 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable {
     
     /// @notice Total asBNB deposited in AsterDEX
     uint256 public totalAsBNBDeposited;
-    
-    /// @notice Paused state for emergency
-    bool public paused;
 
     // ============ Events ============
 
     event Deposited(address indexed user, uint256 bnbAmount, uint256 shares);
     event Withdrawn(address indexed user, uint256 shares, uint256 bnbAmount);
     event StrategyUpdated(address indexed oldStrategy, address indexed newStrategy);
-    event Paused(bool status);
 
     // ============ Errors ============
 
-    error VaultPaused();
     error ZeroAmount();
     error StrategyNotSet();
     error OnlyStrategy();
@@ -69,11 +65,6 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable {
 
     // ============ Modifiers ============
 
-    modifier whenNotPaused() {
-        if (paused) revert VaultPaused();
-        _;
-    }
-
     modifier onlyStrategy() {
         if (msg.sender != strategy) revert OnlyStrategy();
         _;
@@ -91,12 +82,17 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Emergency pause
-     * @param _paused Pause state
+     * @notice Emergency pause deposits
      */
-    function setPaused(bool _paused) external onlyOwner {
-        paused = _paused;
-        emit Paused(_paused);
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause deposits
+     */
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     // ============ Deposit Functions ============
