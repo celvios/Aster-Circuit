@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "../interfaces/IAsBNBMinter.sol";
+import "../interfaces/IPancakeRouter02.sol";
 
 /**
  * @title CircuitVault
@@ -18,13 +18,18 @@ import "../interfaces/IAsBNBMinter.sol";
 contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
-    // ============ State Variables ============
+    // ============ Immutables ============
 
     /// @notice AsterDEX asBNB token contract
     IERC20 public immutable asBNB;
     
-    /// @notice AsterDEX minting contract
-    IAsBNBMinter public immutable asterMinter;
+    /// @notice PancakeSwap Router for swaps
+    IPancakeRouter02 public immutable pancakeRouter;
+    
+    /// @notice WBNB address (for swap path)
+    address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    
+    // ============ State Variables ============
     
     /// @notice Strategy contract address (handles compounding)
     address public strategy;
@@ -49,18 +54,20 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
     /**
      * @notice Initialize the CircuitVault
      * @param _asBNB Address of the asBNB token
-     * @param _asterMinter Address of the AsterDEX minter
+     * @param _pancakeRouter Address of PancakeSwap router
      */
     constructor(
         address _asBNB,
-        address _asterMinter
+        address _pancakeRouter
     ) 
         ERC4626(IERC20(_asBNB)) 
         ERC20("AsterCircuit Vault", "acBNB")
         Ownable(msg.sender)
     {
         asBNB = IERC20(_asBNB);
-        asterMinter = IAsBNBMinter(_asterMinter);
+        pancakeRouter = IPancakeRouter02(_pancakeRouter);
+        
+        // No approval needed here - will approve per-transaction for security
     }
 
     // ============ Modifiers ============
@@ -99,22 +106,50 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
 
     /**
      * @notice Deposit BNB and receive vault shares
-     * @dev Converts BNB -> asBNB -> vault shares
+     * @dev Swaps BNB → asBNB via PancakeSwap
      */
     function depositBNB() external payable nonReentrant whenNotPaused returns (uint256 shares) {
         if (msg.value == 0) revert ZeroAmount();
 
-        // Convert BNB to asBNB via AsterDEX
-        uint256 asBNBReceived = asterMinter.mint{value: msg.value}();
+        // Swap BNB → asBNB via PancakeSwap
+        uint256 asBNBReceived = _swapBNBForAsBNB(msg.value);
         
         // Update accounting
         totalAsBNBDeposited += asBNBReceived;
         
-        // Mint vault shares to user (1:1 with asBNB initially)
+        // Mint vault shares to user
         shares = previewDeposit(asBNBReceived);
         _mint(msg.sender, shares);
 
         emit Deposited(msg.sender, msg.value, shares);
+    }
+    
+    /**
+     * @notice Internal function to swap BNB for asBNB
+     * @param bnbAmount Amount of BNB to swap
+     * @return asBNBAmount Amount of asBNB received
+     */
+    function _swapBNBForAsBNB(uint256 bnbAmount) internal returns (uint256 asBNBAmount) {
+        // Set up swap path: BNB (WBNB) → asBNB
+        address[] memory path = new address[](2);
+        path[0] = WBNB;
+        path[1] = address(asBNB);
+        
+        // Get expected output for slippage protection
+        uint256[] memory amountsOut = pancakeRouter.getAmountsOut(bnbAmount, path);
+        
+        // Set minimum output (0.5% slippage tolerance)
+        uint256 minOutput = (amountsOut[1] * 9950) / 10000;
+        
+        // Execute swap
+        uint256[] memory amounts = pancakeRouter.swapExactETHForTokens{value: bnbAmount}(
+            minOutput,
+            path,
+            address(this),
+            block.timestamp + 300 // 5 minute deadline
+        );
+        
+        asBNBAmount = amounts[1];
     }
 
     /**
@@ -163,13 +198,45 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
         // Update accounting
         totalAsBNBDeposited -= asBNBAmount;
         
-        // Redeem asBNB for BNB via AsterDEX
-        bnbAmount = asterMinter.redeem(asBNBAmount);
+        // Swap asBNB for BNB via PancakeSwap
+        bnbAmount = _swapAsBNBForBNB(asBNBAmount);
         
         // Transfer BNB to user
         payable(msg.sender).transfer(bnbAmount);
 
         emit Withdrawn(msg.sender, shares, bnbAmount);
+    }
+    
+    /**
+     * @notice Internal function to swap asBNB for BNB
+     * @param asBNBAmount Amount of asBNB to swap
+     * @return bnbAmount Amount of BNB received
+     */
+    function _swapAsBNBForBNB(uint256 asBNBAmount) internal returns (uint256 bnbAmount) {
+        // Set up swap path: asBNB → BNB (WBNB)
+        address[] memory path = new address[](2);
+        path[0] = address(asBNB);
+        path[1] = WBNB;
+        
+        // Approve router to spend asBNB
+        asBNB.approve(address(pancakeRouter), asBNBAmount);
+        
+        // Get expected output for slippage protection
+        uint256[] memory amountsOut = pancakeRouter.getAmountsOut(asBNBAmount, path);
+        
+        // Set minimum output (0.5% slippage tolerance)
+        uint256 minOutput = (amountsOut[1] * 9950) / 10000;
+        
+        // Execute swap
+        uint256[] memory amounts = pancakeRouter.swapExactTokensForETH(
+            asBNBAmount,
+            minOutput,
+            path,
+            address(this),
+            block.timestamp + 300
+        );
+        
+        bnbAmount = amounts[1];
     }
 
     /**
@@ -240,8 +307,17 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
      * @return bnbValue Total BNB value of vault
      */
     function totalValueInBNB() external view returns (uint256 bnbValue) {
-        uint256 exchangeRate = asterMinter.exchangeRate();
-        bnbValue = (totalAsBNBDeposited * exchangeRate) / 1e18;
+        if (totalAsBNBDeposited == 0) return 0;
+        
+        address[] memory path = new address[](2);
+        path[0] = address(asBNB);
+        path[1] = WBNB;
+        
+        try pancakeRouter.getAmountsOut(totalAsBNBDeposited, path) returns (uint256[] memory amounts) {
+            bnbValue = amounts[1];
+        } catch {
+            bnbValue = 0;
+        }
     }
 
     /**
@@ -251,9 +327,19 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
      */
     function userValueInBNB(address user) external view returns (uint256 bnbValue) {
         uint256 userShares = balanceOf(user);
+        if (userShares == 0) return 0;
+        
         uint256 userAsBNB = previewRedeem(userShares);
-        uint256 exchangeRate = asterMinter.exchangeRate();
-        bnbValue = (userAsBNB * exchangeRate) / 1e18;
+        
+        address[] memory path = new address[](2);
+        path[0] = address(asBNB);
+        path[1] = WBNB;
+        
+        try pancakeRouter.getAmountsOut(userAsBNB, path) returns (uint256[] memory amounts) {
+            bnbValue = amounts[1];
+        } catch {
+            bnbValue = 0;
+        }
     }
 
     // ============ Receive BNB ============
