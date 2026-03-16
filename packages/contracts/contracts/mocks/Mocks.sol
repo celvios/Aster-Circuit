@@ -14,6 +14,15 @@ contract MockERC20 is ERC20 {
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }
+
+    function deposit() external payable {
+        _mint(msg.sender, msg.value);
+    }
+
+    function withdraw(uint256 amount) external {
+        _burn(msg.sender, amount);
+        payable(msg.sender).transfer(amount);
+    }
 }
 
 contract MockPancakeFactory is IPancakeFactory {
@@ -40,7 +49,7 @@ contract MockPancakeFactory is IPancakeFactory {
 
 contract MockPancakeRouter is IPancakeRouter02 {
     address public factory;
-    address public WETH;
+    address public WETH; // Implements 'function WETH() external view returns (address)'
 
     constructor(address _factory, address _WETH) {
         factory = _factory;
@@ -133,12 +142,25 @@ contract MockMasterChef is IMasterChefV2 {
         poolLengthVal++;
     }
 
-
+    // Fixed: No return values
     function deposit(uint256 pid, uint256 amount) external {}
     function withdraw(uint256 pid, uint256 amount) external {}
     function harvest(uint256 pid, address to) external {}
+
+    // Implement missing view methods
     function pendingCake(uint256 pid, address user) external view returns (uint256) { return 0; }
     function userInfo(uint256 pid, address user) external view returns (UserInfo memory) { return UserInfo(0,0,0); }
-    function poolInfo(uint256 pid) external view returns (PoolInfo memory) { return PoolInfo(0,0,0,0,true); }
+    
+    function poolInfo(uint256 pid) external view returns (PoolInfo memory) {
+         return PoolInfo(0, 0, 0, 0, true);
+    }
+    
+    function updatePool(uint256 pid) external returns (PoolInfo memory) { return PoolInfo(0,0,0,0,true); }
+    
+    // Other methods
+    function add(uint256 allocPoint, address _lpToken, bool _withUpdate, bool _regular) external {}
+    function set(uint256 _pid, uint256 _allocPoint, bool _withUpdate, bool _regular) external {}
+    function totalAllocPoint() external view returns (uint256) { return 0; }
+    function CAKE() external view returns (IERC20) { return IERC20(address(0)); }
     function emergencyWithdraw(uint256 pid) external {}
 }

@@ -1,0 +1,14 @@
+>> Starting Integration Lifecycle Test (Script Mode)...
+>> Deployer: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+>> User: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+>> Network Check: Factory Code exists.
+>> Setup: Hardcoded WBNB-CAKE LP Address: 0x0eD7e52944161450477ee417DE9Cd3a859b14fD0
+>> Setup: Using Verified PID: 2
+>> Deployed Vault at: 0x60db8d00a772a30CD89732D525AEbF21A28A611B
+>> Deployed Strategy at: 0x0961cea26Bcd30f4A2b1c158E9D8f9b18D45CD6A
+Error: VM Exception while processing transaction: reverted with custom error 'InvalidRewardBps()'
+    at Heartbeat.constructor (contracts/core/Heartbeat.sol:79)
+    at EdrProviderWrapper.request (C:\Users\toluk\Desktop\Yield\node_modules\hardhat\src\internal\hardhat-network\provider\provider.ts:453:41)
+    at async HardhatEthersSigner.sendTransaction (C:\Users\toluk\Desktop\Yield\node_modules\@nomicfoundation\hardhat-ethers\src\signers.ts:185:18)
+    at async ContractFactory.deploy (C:\Users\toluk\Desktop\Yield\node_modules\ethers\src.ts\contract\factory.ts:111:24)
+    at async main (C:\Users\toluk\Desktop\Yield\packages\contracts\scripts\integration-test-lifecycle.ts:61:23)

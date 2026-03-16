@@ -6,6 +6,26 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## 🧠 Philosophy of Design
+
+### 1. The "Swap-First" Architecture
+Unlike traditional yield aggregators that mint operational tokens, AsterCircuit prioritizes **Swap-over-Mint** for entering the AsterDEX ecosystem.
+- **Why?** Minting `asBNB` often incurs a deposit fee or requires complex interaction with the minter contract. Swapping for `asBNB` on the open market (PancakeSwap) often provides a better entry price due to market fluctuations, effectively acquiring the yield-bearing asset at a discount.
+- **Mechanism:** The `CircuitVault` optimistically checks if buying `asBNB` via PancakeSwap yields more tokens than direct minting. This "arb-on-entry" ensures users start with an immediate advantage.
+
+### 2. Resilient Compound Stacking (RCS)
+The core risk of yield farming is **Impermanent Loss (IL)** wiping out APR gains. Traditional auto-compounders blindly dump yield back into the LP.
+- **Our Approach:** We treat the LP position as a "volatile yield booster", not a permanent home for capital.
+- **The Loop:**
+    1.  **Base Layer:** 100% of principal sits in Single-Sided Yield (`asBNB`), protecting it from IL.
+    2.  **Yield Layer:** Only the *harvested profit* from the Base Layer is exposed to risk. It is paired with borrowed capital to form LP tokens.
+    3.  **Circuit Breaker:** If the LP position suffers IL > 5% (configurable), the protocol "Panic Exits" - breaking the LP, selling the volatile asset, and retreating entirely to the Base Layer until volatility subsides.
+
+### 3. Permissionless "Heartbeat" Economy
+Centralized keeper bots are a point of failure. AsterCircuit uses an incentivized `Heartbeat` contract.
+- **Incentive:** Any user calling `beat()` gets paid a flat fee + % of pending yield.
+- **Sustainability:** This cost is paid from the *profit* of the strategy, ensuring the protocol pays for its own maintenance without needing external funding or VC subsidies.
+
 ## 🎯 Overview
 
 AsterCircuit implements the **Resilient Compound Stacking (RCS)** strategy - an intelligent yield engine that:

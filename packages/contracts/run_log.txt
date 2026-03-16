@@ -1,0 +1,15 @@
+>> Starting Integration Lifecycle Test (Script Mode)...
+>> Deployer: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+>> User: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+>> Network Check: Factory Code exists.
+>> Setup: Hardcoded WBNB-CAKE LP Address: 0x0eD7e52944161450477ee417DE9Cd3a859b14fD0
+>> Setup: Using Verified PID: 2
+>> Deployed Vault at: 0x45067AE72A7F097b8E606a04291b554f96E754d8
+>> Deployed Strategy at: 0xA0e447A8cc833C11AeA7977015F3b433036d9c3e
+>> Deployed Heartbeat at: 0x36273898930e4Ebf84b1695237D2D5B5ABf525E3
+>> Vault setup complete.
+
+>> Action: User depositing 10 BNB...
+>> Result: User Shares: 0.0
+Error: No shares minted!
+    at main (C:\Users\toluk\Desktop\Yield\packages\contracts\scripts\integration-test-lifecycle.ts:87:29)

@@ -114,11 +114,13 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
         // Swap BNB → asBNB via PancakeSwap
         uint256 asBNBReceived = _swapBNBForAsBNB(msg.value);
         
+        // Mint vault shares to user
+        // Calculate shares BEFORE updating totalAsBNBDeposited to avoid dilution (OZ ERC4626 math)
+        shares = previewDeposit(asBNBReceived);
+        
         // Update accounting
         totalAsBNBDeposited += asBNBReceived;
         
-        // Mint vault shares to user
-        shares = previewDeposit(asBNBReceived);
         _mint(msg.sender, shares);
 
         emit Deposited(msg.sender, msg.value, shares);
@@ -169,11 +171,13 @@ contract CircuitVault is ERC4626, ReentrancyGuard, Ownable, Pausable {
         // Transfer asBNB from user
         asBNB.safeTransferFrom(msg.sender, address(this), assets);
         
+        // Mint shares
+        // Calculate shares BEFORE updating totalAsBNBDeposited to avoid dilution
+        shares = previewDeposit(assets);
+        
         // Update accounting
         totalAsBNBDeposited += assets;
         
-        // Mint shares
-        shares = previewDeposit(assets);
         _mint(receiver, shares);
 
         emit Deposited(receiver, assets, shares);

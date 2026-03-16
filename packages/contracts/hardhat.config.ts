@@ -16,11 +16,11 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
-      forking: {
+      forking: process.env.FORK_ENABLED === "true" ? {
         url: process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org/",
-        blockNumber: process.env.FORK_BLOCK_NUMBER ? parseInt(process.env.FORK_BLOCK_NUMBER) : 44000000,
-      },
-      chainId: 56,
+        blockNumber: process.env.FORK_BLOCK_NUMBER ? parseInt(process.env.FORK_BLOCK_NUMBER) : undefined,
+      } : undefined,
+      chainId: process.env.FORK_ENABLED === "true" ? 56 : 31337,
     },
     bscTestnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545/",

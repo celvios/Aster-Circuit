@@ -22,6 +22,8 @@ out/
 # Misc
 .DS_Store
 *.pem
+*.log
+success_log.txt
 
 # Debug
 npm-debug.log*

@@ -106,5 +106,5 @@ interface IPancakeRouter02 {
         address[] calldata path
     ) external view returns (uint256[] memory amounts);
     
-    function WETH() external pure returns (address);
+    function WETH() external view returns (address);
 }

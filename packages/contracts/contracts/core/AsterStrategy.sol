@@ -184,6 +184,8 @@ contract AsterStrategy is ReentrancyGuard, Ownable {
         emit Deposited(amount, asBNBReceived);
     }
 
+
+
     /**
      * @notice Withdraw: Sell asBNB for BNB
      * @dev Called by Vault for user withdrawals

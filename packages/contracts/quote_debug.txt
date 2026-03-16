@@ -1,0 +1,11 @@
+Connecting to RPC: https://delicate-greatest-energy.bsc.quiknode.pro/97d400e0de1e7c8b3969827d8452f896270454d0/
+Connected to Chain ID: 56
+Current Block Number: 78508112
+Factory Code Length: 38170
+Calling getPair(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c, 0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82)...
+SUCCESS: Pair Address: 0x0eD7e52944161450477ee417DE9Cd3a859b14fD0
+Checking getAmountsOut for 10 BNB -> CAKE...
+Quote: 10.0 BNB -> 5223.441815813987254322 CAKE
+Scanning MasterChef for PID...
+PID 2 Token: 0x0eD7e52944161450477ee417DE9Cd3a859b14fD0
+Confirmed: PID 2 is WBNB-CAKE LP

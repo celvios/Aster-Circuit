@@ -1,0 +1,99 @@
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:111:206:
+    |
+111 |  ...  v, bytes32 r, bytes32 s) external override returns (uint amountA, uint amount ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:112:198:
+    |
+112 |  ...  v, bytes32 r, bytes32 s) external override returns (uint amountToken, uint am ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:118:134:
+    |
+118 |  ... ddress to, uint deadline) external override returns (uint[] memory amounts) {  ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:119:121:
+    |
+119 |  ... o, uint deadline) external payable override returns (uint[] memory amounts) {  ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:120:78:
+    |
+120 |     function quote(uint amountA, uint reserveA, uint reserveB) external pure override returns (uint amountB) { return 0; }
+    |                                                                              ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:121:89:
+    |
+121 |     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure override returns (uint amountOut) { return 0; }
+    |                                                                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:122:89:
+    |
+122 |     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure override returns (uint amountIn) { return 0; }
+    |                                                                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:123:169:
+    |
+123 |  ... ddress to, uint deadline) external override returns (uint amountETH) { return  ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:124:227:
+    |
+124 |  ...  v, bytes32 r, bytes32 s) external override returns (uint amountETH) { return  ...
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:125:163:
+    |
+125 |  ... ddress to, uint deadline) external override {}
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:126:153:
+    |
+126 |  ... o, uint deadline) external payable override {}
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Function has override specified but does not override anything.
+   --> contracts/mocks/Mocks.sol:127:160:
+    |
+127 |  ... ddress to, uint deadline) external override {}
+    |                                         ^^^^^^^^
+
+
+[1m[31mTypeError:[39m[22m Overriding public state variable changes state mutability from "pure" to "view".
+  --> contracts/mocks/Mocks.sol:43:5:
+   |
+43 |     address public WETH;
+   |     ^^^^^^^^^^^^^^^^^^^
+Note: Overridden function is here:
+   --> contracts/interfaces/IPancakeRouter02.sol:109:5:
+    |
+109 |     function WETH() external pure returns (address);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+[31m[1mError[22m[39m [31m[1mHH600:[22m[39m Compilation failed
+
+For more info go to https://v2.hardhat.org/HH600 or run Hardhat with --show-stack-traces
