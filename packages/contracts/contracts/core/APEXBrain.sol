@@ -83,11 +83,15 @@ contract APEXBrain is IAPEXBrain {
     function _readAPYDifferential() internal view returns (uint256) {
         uint256 maxAPY; 
         uint256 minAPY = type(uint256).max;
+        bool anyValid = false;
         for (uint256 i = 0; i < 4; i++) {
+            if (strategies[i] == address(0)) continue;
             uint256 apy = IAPEXStrategy(strategies[i]).currentAPY();
             if (apy > maxAPY) maxAPY = apy;
             if (apy < minAPY) minAPY = apy;
+            anyValid = true;
         }
+        if (!anyValid) return 0;
         return maxAPY - minAPY;
     }
 
@@ -101,10 +105,12 @@ contract APEXBrain is IAPEXBrain {
     }
 
     function _readCapitalUtilization() internal view returns (uint256) {
+        if (vault == address(0)) return 0; // Not yet wired — treat as 0% utilization
         uint256 totalVault = IAPEXVault(vault).totalAssets();
         if (totalVault == 0) return 0;
         uint256 deployed;
         for (uint256 i = 0; i < 4; i++) {
+            if (strategies[i] == address(0)) continue;
             deployed += IAPEXStrategy(strategies[i]).totalAssets();
         }
         return deployed * BPS / totalVault;
