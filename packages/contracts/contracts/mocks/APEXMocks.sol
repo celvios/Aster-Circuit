@@ -32,14 +32,15 @@ contract MockAPEXStrategy {
     function deposit(uint256 amount) external { _totalAssets += amount; }
     function withdraw(uint256 amount) external returns (uint256) {
         _totalAssets = _totalAssets > amount ? _totalAssets - amount : 0;
-        if (vault != address(0)) {
-            IERC20(asset).transfer(vault, amount);
-        }
+        // Transfer tokens back to caller (vault)
+        IERC20(asset).transfer(msg.sender, amount);
         return amount;
     }
     function harvest() external returns (uint256) {
         uint256 h = harvestReturn;
         harvestReturn = 0;
+        // Actually transfer the harvest amount to the caller (compounder)
+        if (h > 0) IERC20(asset).transfer(msg.sender, h);
         return h;
     }
     function totalAssets() external view returns (uint256) { return _totalAssets; }
