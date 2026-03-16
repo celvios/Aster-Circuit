@@ -1,0 +1,16 @@
+{
+  "name": "@apex/subgraph",
+  "version": "0.1.0",
+  "description": "The Graph subgraph for APEX Autonomous Yield Engine",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:studio": "graph deploy --studio apex-protocol",
+    "deploy:hosted": "graph deploy --product hosted-service celvios/apex-protocol",
+    "auth": "graph auth --studio"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "^0.67.0",
+    "@graphprotocol/graph-ts": "^0.35.0"
+  }
+}

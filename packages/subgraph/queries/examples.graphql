@@ -1,0 +1,128 @@
+"""
+APEX Subgraph — Example Queries
+Use these in The Graph Studio Playground or directly from the frontend via Apollo/urql.
+"""
+
+# ── 1. Protocol overview (TVL, APY, harvest stats) ───────────────────────────
+query ProtocolOverview {
+  apexVaults {
+    id
+    totalAssets
+    pricePerShare
+    blendedAPY
+    totalShares
+    txCount
+    updatedAt
+  }
+  protocol(id: "apex") {
+    totalDepositVolume
+    totalWithdrawVolume
+    totalFeeVolume
+    totalHarvestedAllTime
+    uniqueUsers
+    txCount
+  }
+}
+
+# ── 2. TVL + APY chart (30-day daily snapshots) ───────────────────────────────
+query DailyChart($vault: String!, $since: Int!) {
+  dailySnapshots(
+    where: { vault: $vault, date_gt: $since }
+    orderBy: date
+    orderDirection: asc
+    first: 30
+  ) {
+    date
+    totalAssets
+    pricePerShare
+    blendedAPY
+    dailyDepositVolume
+    dailyWithdrawVolume
+    dailyFeeVolume
+    totalHarvestedAllTime
+  }
+}
+
+# ── 3. Brain weight history (regime timeline) ─────────────────────────────────
+query WeightHistory($first: Int = 50) {
+  weightSnapshots(
+    orderBy: timestamp
+    orderDirection: desc
+    first: $first
+  ) {
+    id
+    lpYield
+    staking
+    lending
+    hedge
+    volatilityIndex
+    apyDifferential
+    capitalUtilization
+    timestamp
+    txHash
+  }
+}
+
+# ── 4. User position & history ────────────────────────────────────────────────
+query UserPosition($address: Bytes!) {
+  user(id: $address) {
+    sharesBalance
+    totalDeposited
+    totalWithdrawn
+    feePaid
+    txCount
+    firstDepositAt
+    lastActivityAt
+    deposits(orderBy: timestamp, orderDirection: desc, first: 10) {
+      assets
+      shares
+      pricePerShareAtDeposit
+      timestamp
+      txHash
+    }
+    withdrawals(orderBy: timestamp, orderDirection: desc, first: 10) {
+      assetsGross
+      assetsNet
+      fee
+      pricePerShareAtWithdrawal
+      timestamp
+      txHash
+    }
+  }
+}
+
+# ── 5. Recent harvest events (compounder activity) ────────────────────────────
+query RecentHarvests($first: Int = 20) {
+  harvestEvents(
+    orderBy: timestamp
+    orderDirection: desc
+    first: $first
+  ) {
+    id
+    totalHarvested
+    allocLPYield
+    allocStaking
+    allocLending
+    allocHedge
+    timestamp
+    txHash
+  }
+}
+
+# ── 6. Leaderboard — top depositors by totalDeposited ─────────────────────────
+query TopDepositors($first: Int = 20) {
+  users(
+    orderBy: totalDeposited
+    orderDirection: desc
+    first: $first
+    where: { sharesBalance_gt: "0" }
+  ) {
+    id
+    sharesBalance
+    totalDeposited
+    totalWithdrawn
+    feePaid
+    txCount
+    firstDepositAt
+  }
+}

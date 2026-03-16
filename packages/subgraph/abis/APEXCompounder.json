@@ -1,0 +1,14 @@
+[
+  {
+    "type":"event",
+    "name":"Compounded",
+    "inputs":[
+      {"name":"totalHarvested","type":"uint256","indexed":false},
+      {"name":"timestamp","type":"uint256","indexed":false},
+      {"name":"reallocation","type":"uint256[4]","indexed":false}
+    ]
+  },
+  {"type":"event","name":"CompoundSkipped","inputs":[{"name":"harvested","type":"uint256","indexed":false},{"name":"threshold","type":"uint256","indexed":false}]},
+  {"type":"function","name":"lastCompound","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"uint256"}]},
+  {"type":"function","name":"totalHarvestedAllTime","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"uint256"}]}
+]

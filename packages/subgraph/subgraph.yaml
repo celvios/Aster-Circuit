@@ -1,0 +1,101 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+
+description: "APEX Autonomous Yield Engine — indexes Vault deposits/withdrawals, Brain weight rotations, Compounder harvests, and daily TVL/APY snapshots."
+repository: "https://github.com/celvios/Aster-Circuit"
+
+dataSources:
+
+  # ── APEXVault ──────────────────────────────────────────────────────────────
+  - kind: ethereum
+    name: APEXVault
+    network: bsc
+    source:
+      # ⚠️  Replace with deployed APEXVault address after mainnet deployment
+      address: "0x0000000000000000000000000000000000000001"
+      abi: APEXVault
+      startBlock: 37000000  # Update to deployment block
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - APEXVault
+        - User
+        - Deposit
+        - Withdrawal
+        - DailySnapshot
+        - Protocol
+      abis:
+        - name: APEXVault
+          file: ./abis/APEXVault.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed address,uint256,uint256)
+          handler: handleDeposit
+        - event: Withdraw(indexed address,indexed address,indexed address,uint256,uint256)
+          handler: handleWithdraw
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        - event: BrainUpdated(address)
+          handler: handleBrainUpdated
+        - event: TreasuryUpdated(address)
+          handler: handleTreasuryUpdated
+        - event: Synced(uint256,uint256)
+          handler: handleSynced
+      file: ./src/vault.ts
+
+  # ── APEXBrain ──────────────────────────────────────────────────────────────
+  - kind: ethereum
+    name: APEXBrain
+    network: bsc
+    source:
+      # ⚠️  Replace with deployed APEXBrain address after mainnet deployment
+      address: "0x0000000000000000000000000000000000000002"
+      abi: APEXBrain
+      startBlock: 37000000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - WeightSnapshot
+        - APEXVault
+        - DailySnapshot
+      abis:
+        - name: APEXBrain
+          file: ./abis/APEXBrain.json
+        - name: APEXVault
+          file: ./abis/APEXVault.json
+      eventHandlers:
+        - event: WeightsUpdated((uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),(uint256,uint256,uint256))
+          handler: handleWeightsUpdated
+      file: ./src/brain.ts
+
+  # ── APEXCompounder ─────────────────────────────────────────────────────────
+  - kind: ethereum
+    name: APEXCompounder
+    network: bsc
+    source:
+      # ⚠️  Replace with deployed APEXCompounder address after mainnet deployment
+      address: "0x0000000000000000000000000000000000000003"
+      abi: APEXCompounder
+      startBlock: 37000000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - HarvestEvent
+        - APEXVault
+        - DailySnapshot
+        - Protocol
+      abis:
+        - name: APEXCompounder
+          file: ./abis/APEXCompounder.json
+        - name: APEXVault
+          file: ./abis/APEXVault.json
+      eventHandlers:
+        - event: Compounded(uint256,uint256,uint256[4])
+          handler: handleCompounded
+      file: ./src/compounder.ts

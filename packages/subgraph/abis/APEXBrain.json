@@ -1,0 +1,24 @@
+[
+  {
+    "type":"event",
+    "name":"WeightsUpdated",
+    "inputs":[
+      {"name":"oldWeights","type":"tuple","indexed":false,"components":[
+        {"name":"lpYield","type":"uint256"},{"name":"staking","type":"uint256"},
+        {"name":"lending","type":"uint256"},{"name":"hedge","type":"uint256"}
+      ]},
+      {"name":"newWeights","type":"tuple","indexed":false,"components":[
+        {"name":"lpYield","type":"uint256"},{"name":"staking","type":"uint256"},
+        {"name":"lending","type":"uint256"},{"name":"hedge","type":"uint256"}
+      ]},
+      {"name":"signals","type":"tuple","indexed":false,"components":[
+        {"name":"apyDifferential","type":"uint256"},
+        {"name":"volatilityIndex","type":"uint256"},
+        {"name":"capitalUtilization","type":"uint256"}
+      ]}
+    ]
+  },
+  {"type":"function","name":"currentWeights","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"tuple","components":[{"name":"lpYield","type":"uint256"},{"name":"staking","type":"uint256"},{"name":"lending","type":"uint256"},{"name":"hedge","type":"uint256"}]}]},
+  {"type":"function","name":"computeWeights","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"tuple","components":[{"name":"lpYield","type":"uint256"},{"name":"staking","type":"uint256"},{"name":"lending","type":"uint256"},{"name":"hedge","type":"uint256"}]}]},
+  {"type":"function","name":"lastRebalance","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"uint256"}]}
+]

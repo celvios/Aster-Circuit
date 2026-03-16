@@ -1,0 +1,143 @@
+"""
+APEX Protocol — The Graph Schema
+═══════════════════════════════════════════════════════════════
+Entities indexed:
+  - APEXVault: share supply, TVL, pricePerShare over time
+  - User: individual position — shares held, net deposits, PnL
+  - Deposit / Withdrawal: per-tx events
+  - WeightSnapshot: Brain weight vector history
+  - Signal: on-chain signal readings (vol, APY diff, utilization)
+  - HarvestEvent: per compounder cycle stats
+  - DailySnapshot: daily aggregate for charting
+"""
+
+# ── Vault-level aggregate ─────────────────────────────────────────────────────
+type APEXVault @entity(immutable: false) {
+  id: Bytes!                   # vault contract address
+  address: Bytes!
+  totalShares: BigInt!         # ERC-20 totalSupply of APEX-LP
+  totalAssets: BigDecimal!     # WBNB under management (18 decimals)
+  pricePerShare: BigDecimal!   # APEX-LP price in WBNB (1e18 scale)
+  exitFeeBps: Int!             # 10 = 0.1%
+  paused: Boolean!
+  treasury: Bytes!
+  brain: Bytes!
+  compounder: Bytes!
+  strategies: [Bytes!]!        # array of 4 strategy addresses
+  blendedAPY: BigDecimal!      # weighted APY in bps
+  txCount: BigInt!
+  updatedAt: BigInt!           # block timestamp of last update
+}
+
+# ── User position ─────────────────────────────────────────────────────────────
+type User @entity(immutable: false) {
+  id: Bytes!                   # wallet address
+  sharesBalance: BigInt!       # current APEX-LP balance
+  totalDeposited: BigDecimal!  # cumulative WBNB deposited
+  totalWithdrawn: BigDecimal!  # cumulative WBNB withdrawn (after fees)
+  feePaid: BigDecimal!         # total exit fee paid to treasury
+  txCount: BigInt!
+  deposits: [Deposit!]! @derivedFrom(field: "user")
+  withdrawals: [Withdrawal!]! @derivedFrom(field: "user")
+  firstDepositAt: BigInt!
+  lastActivityAt: BigInt!
+}
+
+# ── Per-transaction events ────────────────────────────────────────────────────
+type Deposit @entity(immutable: true) {
+  id: Bytes!                   # txHash + logIndex
+  user: User!
+  vault: APEXVault!
+  assets: BigDecimal!          # WBNB deposited
+  shares: BigDecimal!          # APEX-LP minted
+  pricePerShareAtDeposit: BigDecimal!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+type Withdrawal @entity(immutable: true) {
+  id: Bytes!
+  user: User!
+  vault: APEXVault!
+  shares: BigDecimal!          # APEX-LP burned
+  assetsGross: BigDecimal!     # total WBNB before fee
+  assetsNet: BigDecimal!       # WBNB user received
+  fee: BigDecimal!             # WBNB fee paid to treasury
+  pricePerShareAtWithdrawal: BigDecimal!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+# ── Brain weight history ──────────────────────────────────────────────────────
+type WeightSnapshot @entity(immutable: true) {
+  id: Bytes!                   # txHash + logIndex
+  vault: APEXVault!
+  "M1 LP Yield weight (bps)"
+  lpYield: Int!
+  "M2 Staking weight (bps)"
+  staking: Int!
+  "M3 Lending weight (bps)"
+  lending: Int!
+  "M4 Hedge weight (bps)"
+  hedge: Int!
+  "Trigger signal values"
+  apyDifferential: BigDecimal!
+  volatilityIndex: BigDecimal!
+  capitalUtilization: BigDecimal!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+# ── Compounder harvest events ─────────────────────────────────────────────────
+type HarvestEvent @entity(immutable: true) {
+  id: Bytes!                   # txHash + logIndex
+  vault: APEXVault!
+  totalHarvested: BigDecimal!  # WBNB harvested across all strategies
+  allocLPYield: BigDecimal!    # WBNB reinvested to M1
+  allocStaking: BigDecimal!    # WBNB reinvested to M2
+  allocLending: BigDecimal!    # WBNB reinvested to M3
+  allocHedge: BigDecimal!      # WBNB reinvested to M4
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+# ── Daily aggregate for TVL/APY charts ────────────────────────────────────────
+type DailySnapshot @entity(immutable: false) {
+  id: String!                  # "YYYY-MM-DD"
+  vault: APEXVault!
+  date: Int!                   # unix day number (timestamp / 86400)
+  totalAssets: BigDecimal!
+  pricePerShare: BigDecimal!
+  blendedAPY: BigDecimal!
+  "Sum of all deposit amounts in WBNB"
+  dailyDepositVolume: BigDecimal!
+  "Sum of all withdrawal amounts (gross) in WBNB"
+  dailyWithdrawVolume: BigDecimal!
+  "Total fees collected in day"
+  dailyFeeVolume: BigDecimal!
+  "Count of unique depositors that day"
+  dailyActiveUsers: BigInt!
+  totalHarvestedAllTime: BigDecimal!
+  "Brain weights at end of day"
+  weightLPYield: Int!
+  weightStaking: Int!
+  weightLending: Int!
+  weightHedge: Int!
+  timestamp: BigInt!
+}
+
+# ── Protocol-wide aggregate ────────────────────────────────────────────────────
+type Protocol @entity(immutable: false) {
+  id: String!                  # "apex"
+  totalDepositVolume: BigDecimal!
+  totalWithdrawVolume: BigDecimal!
+  totalFeeVolume: BigDecimal!
+  totalHarvestedAllTime: BigDecimal!
+  uniqueUsers: BigInt!
+  txCount: BigInt!
+  lastUpdateTimestamp: BigInt!
+}
