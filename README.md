@@ -1,99 +1,220 @@
-# AsterCircuit
+# APEX Protocol
 
-**Self-Driving Yield Engine for BNB Chain**
+> **Autonomous Protocol for Exponential Yield**  
+> Built on BNB Chain · Riquid Hackathon 2026 · Based on AsterCircuit
 
-> Autonomous, non-custodial yield optimization protocol leveraging AsterDEX Earn and PancakeSwap V2
+---
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## What is APEX?
 
-## 🧠 Philosophy of Design
-
-### 1. The "Swap-First" Architecture
-Unlike traditional yield aggregators that mint operational tokens, AsterCircuit prioritizes **Swap-over-Mint** for entering the AsterDEX ecosystem.
-- **Why?** Minting `asBNB` often incurs a deposit fee or requires complex interaction with the minter contract. Swapping for `asBNB` on the open market (PancakeSwap) often provides a better entry price due to market fluctuations, effectively acquiring the yield-bearing asset at a discount.
-- **Mechanism:** The `CircuitVault` optimistically checks if buying `asBNB` via PancakeSwap yields more tokens than direct minting. This "arb-on-entry" ensures users start with an immediate advantage.
-
-### 2. Resilient Compound Stacking (RCS)
-The core risk of yield farming is **Impermanent Loss (IL)** wiping out APR gains. Traditional auto-compounders blindly dump yield back into the LP.
-- **Our Approach:** We treat the LP position as a "volatile yield booster", not a permanent home for capital.
-- **The Loop:**
-    1.  **Base Layer:** 100% of principal sits in Single-Sided Yield (`asBNB`), protecting it from IL.
-    2.  **Yield Layer:** Only the *harvested profit* from the Base Layer is exposed to risk. It is paired with borrowed capital to form LP tokens.
-    3.  **Circuit Breaker:** If the LP position suffers IL > 5% (configurable), the protocol "Panic Exits" - breaking the LP, selling the volatile asset, and retreating entirely to the Base Layer until volatility subsides.
-
-### 3. Permissionless "Heartbeat" Economy
-Centralized keeper bots are a point of failure. AsterCircuit uses an incentivized `Heartbeat` contract.
-- **Incentive:** Any user calling `beat()` gets paid a flat fee + % of pending yield.
-- **Sustainability:** This cost is paid from the *profit* of the strategy, ensuring the protocol pays for its own maintenance without needing external funding or VC subsidies.
-
-## 🎯 Overview
-
-AsterCircuit implements the **Resilient Compound Stacking (RCS)** strategy - an intelligent yield engine that:
-- Deposits capital into AsterDEX Earn as the foundation
-- Automatically compounds yield into PancakeSwap LP positions
-- Monitors impermanent loss and exits defensively when risk exceeds threshold
-- Runs autonomously via permissionless, incentivized automation
-
-## 🏗️ Architecture
+APEX is a self-driving yield vault that autonomously allocates capital across four yield strategies on BNB Chain. An on-chain **Brain** reads market signals every block and rotates weights between strategies to maximise risk-adjusted returns — with zero manual intervention.
 
 ```
-User → CircuitVault (ERC-4626) → AsterDEX Earn → Yield
-                                        ↓
-                                  AsterStrategy
-                                        ↓
-                            PancakeSwap BNB-USDT LP
-                                        ↓
-                              Monitor IL & Rebalance
+Deposit WBNB → Brain reads signals → Allocates across M1–M4 → Compounder harvests → PPS grows
 ```
 
-## 📦 Repository Structure
+---
+
+## Architecture
 
 ```
-Yield/
-├── packages/
-│   ├── contracts/        # Smart contracts (Hardhat)
-│   │   ├── contracts/
-│   │   │   ├── core/     # Vault, Strategy, Heartbeat
-│   │   │   ├── interfaces/
-│   │   │   └── libraries/
-│   │   ├── scripts/      # Deployment scripts
-│   │   └── test/         # Contract tests
-│   └── frontend/         # Next.js dashboard
-└── README.md
+┌─────────────────────────────────────────────────────┐
+│                    APEXVault (ERC-4626)              │
+│  Accepts WBNB, mints APEX-LP shares, manages PPS    │
+└──────────────────────┬──────────────────────────────┘
+                       │ syncs weights
+          ┌────────────▼────────────┐
+          │       APEXBrain         │
+          │  Reads on-chain signals │
+          │  (volatility, APY diff, │
+          │   capital utilisation)  │
+          │  → outputs weight vector│
+          └────────────┬────────────┘
+                       │ weight vector [w1, w2, w3, w4]
+     ┌─────────────────┼─────────────────┐
+     ▼                 ▼                 ▼                 ▼
+  M1 LP Yield    M2 Staking      M3 Lending         M4 Hedge
+  AsterDEX LP    asBNB           Venus               AsterDEX Pro
+  10–18% APY     6–9% APY        4–7% APY            2–5% APY
+
+          ┌────────────────────────┐
+          │     APEXCompounder     │
+          │  Permissionless harvest│
+          │  Reinvests yield       │
+          │  across M1–M4          │
+          └────────────────────────┘
 ```
 
-## 🚀 Quick Start
+### Brain Regimes
+
+| Regime | Trigger | M1 | M2 | M3 | M4 |
+|---|---|---|---|---|---|
+| High Volatility | `volatility > 5%` | 10% | 50% | 30% | 10% |
+| APY Chase | `APY diff > 3%` | 40% | 25% | 10% | 25% |
+| Idle Capital | `utilisation < 30%` | 20% | 30% | 40% | 10% |
+| Balanced (default) | — | 25% | 35% | 20% | 20% |
+
+---
+
+## Repo Structure
+
+```
+packages/
+├── contracts/          # Hardhat — Solidity contracts + tests
+│   ├── contracts/
+│   │   ├── core/       # APEXVault, APEXBrain, APEXCompounder
+│   │   ├── strategies/ # LPYield, Staking, Lending, Hedge
+│   │   ├── interfaces/ # IAPEXVault, IAPEXBrain, IAPEXStrategy
+│   │   └── mocks/      # Test mocks
+│   ├── test/
+│   │   ├── unit/       # APEXBrain.test.ts, APEXVault.test.ts
+│   │   └── integration/# fullCycle.test.ts (36/36 passing)
+│   └── scripts/
+│       ├── deploy-local.ts  # Local Hardhat deploy + .env.local.apex
+│       └── deployAPEX.ts    # Testnet/mainnet deploy
+│
+├── subgraph/           # The Graph — AssemblyScript mappings
+│   ├── schema.graphql  # 8 entities
+│   ├── subgraph.yaml   # 3 data sources
+│   ├── src/            # vault.ts, brain.ts, compounder.ts
+│   └── queries/        # Example GraphQL queries
+│
+└── frontend/           # Next.js 16 dashboard
+    ├── app/
+    │   ├── page.tsx         # Landing page
+    │   └── dashboard/       # APEX Mission Control
+    ├── components/apex/     # VaultStats, Charts, DepositWidget...
+    └── lib/                 # useVault, useBrain, useSubgraph hooks
+```
+
+---
+
+## Quick Start (Local)
 
 ### Prerequisites
-- Node.js v18+
-- npm or yarn
+- Node.js 18+
+- pnpm or npm
 
-### Installation
+### 1. Install dependencies
+
 ```bash
-# Install dependencies
-npm install
+npm install          # root
+cd packages/contracts && npm install
+cd packages/frontend  && npm install
+```
 
-# Compile contracts
+### 2. Start local Hardhat node
+
+```bash
 cd packages/contracts
-npx hardhat compile
+npx hardhat node
+```
 
-# Run tests on BSC fork
+### 3. Deploy APEX contracts
+
+```bash
+# In a new terminal
+npx hardhat run scripts/deploy-local.ts --network localhost
+# → Writes packages/frontend/.env.local.apex with contract addresses
+```
+
+### 4. Configure frontend
+
+```bash
+# Copy generated addresses into .env.local
+cp packages/frontend/.env.local.apex packages/frontend/.env.local
+# Or manually merge the APEX_ variables into your existing .env.local
+```
+
+### 5. Start frontend
+
+```bash
+cd packages/frontend
+npm run dev
+# → http://localhost:3000
+# → http://localhost:3000/dashboard
+```
+
+### 6. Connect MetaMask
+
+- Network: `localhost`, Chain ID `31337`, RPC `http://127.0.0.1:8545`
+- Import private key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
+
+---
+
+## Testing
+
+```bash
+cd packages/contracts
+
+# Unit tests
+npx hardhat test test/unit/APEXBrain.test.ts
+npx hardhat test test/unit/APEXVault.test.ts
+
+# Full integration cycle
+npx hardhat test test/integration/fullCycle.test.ts
+
+# All (36/36 passing)
 npx hardhat test
 ```
 
-## 🧪 Development Status
+---
 
-- ✅ Phase 1: Scaffold Complete
-- 🔄 Phase 2A: Contracts Compiled
-- ⏳ Phase 2B: Integration Testing
-- ⏳ Phase 3: Frontend Dashboard
-- ⏳ Phase 4: Final Testing & Demo
+## Subgraph
 
-## 📄 License
+```bash
+cd packages/subgraph
+npm install
+
+# Authenticate
+npx graph auth --studio <YOUR_DEPLOY_KEY>
+
+# Build
+npm run codegen && npm run build
+
+# Deploy to The Graph Studio
+npm run deploy
+```
+
+Once deployed, set `NEXT_PUBLIC_SUBGRAPH_URL` in `.env.local` and the charts will populate with real historical data.
+
+---
+
+## Contracts (Local Deploy Addresses)
+
+After running `deploy-local.ts`, addresses are written to `.env.local.apex`. For testnet/mainnet deploy addresses, see the deployment notes after running `deployAPEX.ts`.
+
+---
+
+## Frontend Features
+
+| Component | Description |
+|---|---|
+| **VaultStats** | Live TVL, blended APY, PPS, total harvested |
+| **StrategyWeights** | Real-time M1–M4 donut chart from Brain |
+| **APYChart / TVLChart / PPSChart** | 30-day historical charts from subgraph |
+| **UserPosition** | Your shares, WBNB value, PnL |
+| **DepositWidget** | Approve + deposit with previewDeposit |
+| **WithdrawWidget** | Slider, fee breakdown, single-click redeem |
+| **BrainControls** | Live weight bars, rebalance button |
+| **CompounderControls** | Permissionless compound button |
+| **RebalanceHistory** | Regime change table with BSCScan links |
+| **HarvestFeed** | Recent compound cycle cards |
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| Smart Contracts | Solidity ^0.8.20, Hardhat, OpenZeppelin |
+| Indexing | The Graph Protocol (AssemblyScript) |
+| Frontend | Next.js 16, Tailwind CSS 4, Recharts |
+| Web3 | wagmi v2, viem, RainbowKit / Reown AppKit |
+| Testing | Hardhat · ethers.js · Chai · TypeScript |
+
+---
+
+## License
 
 MIT
-
-## 🔗 Links
-
-- [Implementation Plan](./implementation_plan.md)
-- [BNB Chain Yield Hackathon](https://dorahacks.io/hackathon/bnb-yield)
