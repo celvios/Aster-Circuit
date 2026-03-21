@@ -2,6 +2,7 @@
   {
     "type":"event",
     "name":"WeightsUpdated",
+    "anonymous":false,
     "inputs":[
       {"name":"oldWeights","type":"tuple","indexed":false,"components":[
         {"name":"lpYield","type":"uint256"},{"name":"staking","type":"uint256"},

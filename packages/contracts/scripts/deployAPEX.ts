@@ -22,7 +22,8 @@ dotenv.config();
  */
 
 // ── Known BNB Chain Addresses ──────────────────────────────────────────────
-const WBNB               = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+const WBNB_MAINNET     = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+const WBNB_TESTNET     = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"; // BSC Chapel testnet
 const USDT               = "0x55d398326f99059fF775485246999027B3197955";
 const XVS                = "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63";
 const V_USDT             = "0xfD5840Cd36d94D7229439859C0112a4185BC0255"; // Venus vUSDT
@@ -62,7 +63,10 @@ async function main() {
   const network = await ethers.provider.getNetwork();
   const [deployer] = await ethers.getSigners();
   const balance = await ethers.provider.getBalance(deployer.address);
+  const chainId = Number(network.chainId);
 
+  // Select correct WBNB for the target network
+  const WBNB = chainId === 97 ? WBNB_TESTNET : WBNB_MAINNET;
   console.log("\n⚡ APEX Protocol Deployment");
   console.log("═══════════════════════════════════════════════════════");
   console.log(`Network:   ${network.name} (chainId: ${network.chainId})`);
@@ -163,7 +167,6 @@ async function main() {
   await verify(vaultAddr,        vaultArgs);
 
   // ── Write frontend .env.local ────────────────────────────────────────────
-  const chainId = Number(network.chainId);
   const envContent = `# APEX ${network.name} Deployment — ${new Date().toISOString()}
 NEXT_PUBLIC_CHAIN_ID=${chainId}
 NEXT_PUBLIC_APEX_VAULT_ADDRESS=${vaultAddr}

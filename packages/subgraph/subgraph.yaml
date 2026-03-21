@@ -6,13 +6,11 @@ dataSources:
   # ── APEXVault ──────────────────────────────────────────────────────────────
   - kind: ethereum
     name: APEXVault
-    network: bsc
+    network: chapel
     source:
-      # Replace with your deployed vault address after BSC deploy
-      address: "0x0000000000000000000000000000000000000000"
+      address: "0x7073428b61062c96A7Cc9c09dbdBf6B39b489Cd7"
       abi: APEXVault
-      # Replace with the block your vault was deployed at
-      startBlock: 40000000
+      startBlock: 44800000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -32,20 +30,20 @@ dataSources:
           handler: handleDeposit
         - event: Withdraw(indexed address,indexed address,indexed address,uint256,uint256)
           handler: handleWithdraw
-        - event: BrainUpdated(indexed address)
+        - event: BrainUpdated(address)
           handler: handleBrainUpdated
-        - event: Synced(uint256[4],uint256)
+        - event: Synced(uint256,uint256)
           handler: handleSynced
       file: ./src/vault.ts
 
   # ── APEXBrain ──────────────────────────────────────────────────────────────
   - kind: ethereum
     name: APEXBrain
-    network: bsc
+    network: chapel
     source:
-      address: "0x0000000000000000000000000000000000000000"
+      address: "0xA8d94E28235Cc53DD5C284ba09a3a3339BD79584"
       abi: APEXBrain
-      startBlock: 40000000
+      startBlock: 44800000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -57,18 +55,18 @@ dataSources:
         - name: APEXBrain
           file: ./abis/APEXBrain.json
       eventHandlers:
-        - event: WeightsUpdated(uint256[4],uint256[4],uint256[3])
+        - event: WeightsUpdated((uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),(uint256,uint256,uint256))
           handler: handleWeightsUpdated
       file: ./src/brain.ts
 
   # ── APEXCompounder ─────────────────────────────────────────────────────────
   - kind: ethereum
     name: APEXCompounder
-    network: bsc
+    network: chapel
     source:
-      address: "0x0000000000000000000000000000000000000000"
+      address: "0x25F6369e61Ab3Cec867E8EE5501D4c3b08A9fA84"
       abi: APEXCompounder
-      startBlock: 40000000
+      startBlock: 44800000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -84,3 +82,5 @@ dataSources:
         - event: Compounded(uint256,uint256,uint256[4])
           handler: handleCompounded
       file: ./src/compounder.ts
+
+
